@@ -13,12 +13,13 @@ import { getFirestore, collection, query, where, getDocs } from "firebase/firest
 // ==========================================
 // นำค่า firebaseConfig ที่ได้จาก Firebase Console มาวางตรงนี้
 const firebaseConfig = {
-  apiKey: "AIzaSy...",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "...",
-  appId: "..."
+  apiKey: "AIzaSyDrJK-b9BepfVJyFbuEjcXEq_pbNVGWizo",
+  authDomain: "loginfirebasesmac.firebaseapp.com",
+  projectId: "loginfirebasesmac",
+  storageBucket: "loginfirebasesmac.firebasestorage.app",
+  messagingSenderId: "981441935732",
+  appId: "1:981441935732:web:d105a96938175b73ffd421",
+  measurementId: "G-F3Q9F390WV"
 };
 // ==========================================
 
