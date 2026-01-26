@@ -172,7 +172,7 @@ export default function App() {
             <div className="mx-auto bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm">
               <Database className="text-white w-8 h-8" />
             </div>
-            <h2 className="text-2xl font-bold text-white">ระบบสมาชิก Firebase</h2>
+            <h2 className="text-2xl font-bold text-white">ระบบสมาชิกฐานข้อมูล</h2>
             <p className="text-orange-100 text-sm mt-1">รวดเร็ว ปลอดภัย รองรับผู้ใช้ไม่จำกัด</p>
           </div>
 
@@ -185,13 +185,6 @@ export default function App() {
                 </div>
                 <span className="text-xs opacity-90">{error}</span>
               </div>
-            )}
-            
-            {(!firebaseConfig.apiKey || firebaseConfig.apiKey === "AIzaSy...") && (
-               <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm text-center animate-pulse">
-                 <b>Developer Alert:</b><br/>
-                 กรุณาใส่ Firebase Config ในไฟล์ App.jsx (บรรทัดที่ 15)
-               </div>
             )}
 
             <div className="space-y-4 pt-2">
@@ -218,7 +211,7 @@ export default function App() {
                 />
               </div>
               <p className="text-xs text-gray-400 text-center">
-                *ระบบจะเติม @test.com ให้ username อัตโนมัติ (Mock Email)
+                หากพบปัญหาการใช้งานกรุณาติดต่อ
               </p>
             </div>
 
@@ -253,7 +246,7 @@ export default function App() {
               <div className="bg-orange-600 p-1.5 rounded-lg">
                 <Database className="text-white w-5 h-5" />
               </div>
-              <span className="font-bold text-gray-800 text-lg hidden sm:block">Firebase System</span>
+              <span className="font-bold text-gray-800 text-lg hidden sm:block">ระบบสมาชิกฐานข้อมูล</span>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
@@ -276,9 +269,9 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">ข้อมูลส่วนตัวของคุณ (Firestore)</h1>
+            <h1 className="text-2xl font-bold text-gray-900">ข้อมูลส่วนตัวของคุณ</h1>
             <p className="text-gray-500 mt-1 text-sm">
-              ดึงข้อมูลจาก Collection "data" ที่ username = <b>{user?.username}</b>
+              สวัสดีคุณ <b>{user?.username}</b>
             </p>
           </div>
           <button 
@@ -295,7 +288,7 @@ export default function App() {
           {dataLoading ? (
             <div className="flex flex-col items-center justify-center h-[300px] text-gray-500">
                <Loader2 className="w-10 h-10 animate-spin text-orange-600 mb-3" />
-               <p className="font-medium">กำลังโหลดข้อมูลจาก Firebase...</p>
+               <p className="font-medium">กำลังโหลดข้อมูล...</p>
             </div>
           ) : sheetData.length > 0 ? (
             <div className="overflow-x-auto">
