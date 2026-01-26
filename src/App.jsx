@@ -166,14 +166,14 @@ export default function App() {
 
   if (view === 'login') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-100 flex items-center justify-center p-4 font-sans">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-red-100 flex items-center justify-center p-4 font-sans">
         <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
-          <div className="bg-orange-600 p-6 text-center">
+          <div className="bg-indigo-600 p-6 text-center">
             <div className="mx-auto bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm">
               <Database className="text-white w-8 h-8" />
             </div>
             <h2 className="text-2xl font-bold text-white">ระบบสมาชิกฐานข้อมูล</h2>
-            <p className="text-orange-100 text-sm mt-1">รวดเร็ว ปลอดภัย รองรับผู้ใช้ไม่จำกัด</p>
+            <p className="text-indigo-100 text-sm mt-1">รวดเร็ว ปลอดภัย รองรับผู้ใช้ไม่จำกัด</p>
           </div>
 
           <form onSubmit={handleLogin} className="p-8 space-y-6">
@@ -196,7 +196,7 @@ export default function App() {
                   placeholder="Username (เช่น admin)"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                 />
               </div>
               <div className="relative">
@@ -207,7 +207,7 @@ export default function App() {
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                 />
               </div>
               <p className="text-xs text-gray-400 text-center">
@@ -218,7 +218,7 @@ export default function App() {
             <button
               type="submit"
               disabled={loading || !auth}
-              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 rounded-lg shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
@@ -243,16 +243,16 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center gap-2">
-              <div className="bg-orange-600 p-1.5 rounded-lg">
+              <div className="bg-indigo-600 p-1.5 rounded-lg">
                 <Database className="text-white w-5 h-5" />
               </div>
               <span className="font-bold text-gray-800 text-lg hidden sm:block">ระบบสมาชิกฐานข้อมูล</span>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
-                <UserCircle className="w-4 h-4 text-orange-500" />
+                <UserCircle className="w-4 h-4 text-indigo-500" />
                 <span className="hidden sm:inline">ผู้ใช้: </span>
-                <b className="text-orange-700">{user?.username}</b>
+                <b className="text-indigo-700">{user?.username}</b>
               </div>
               <button
                 onClick={handleLogout}
@@ -277,7 +277,7 @@ export default function App() {
           <button 
             onClick={() => fetchData(user?.username)}
             disabled={dataLoading}
-            className="text-sm text-orange-600 hover:text-orange-800 font-medium bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2"
+            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2"
           >
              {dataLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
              รีเฟรชข้อมูล
@@ -287,7 +287,7 @@ export default function App() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[300px]">
           {dataLoading ? (
             <div className="flex flex-col items-center justify-center h-[300px] text-gray-500">
-               <Loader2 className="w-10 h-10 animate-spin text-orange-600 mb-3" />
+               <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mb-3" />
                <p className="font-medium">กำลังโหลดข้อมูล...</p>
             </div>
           ) : sheetData.length > 0 ? (
