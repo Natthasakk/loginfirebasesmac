@@ -6,8 +6,8 @@ import { Lock, User, Database, ArrowRight, Table, AlertCircle, LogOut, UserCircl
 // ------------------------------------------------------------------
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { getFirestore, collection, query, where, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore"; // เพิ่ม deleteDoc, doc
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage"; // เพิ่ม deleteObject
+import { getFirestore, collection, query, where, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 
 // ==========================================
 // ⚠️ ส่วนที่ต้องแก้ไข (FIREBASE CONFIGURATION) ⚠️
@@ -50,8 +50,8 @@ export default function App() {
   const [sheetData, setSheetData] = useState([]);
 
   // --- แยกข้อมูลสินค้า และ ไฟล์อัปโหลด ออกจากกัน ---
-  const products = sheetData.filter(item => !item.file_url); // ถ้าไม่มี file_url คือสินค้า
-  const uploads = sheetData.filter(item => item.file_url);   // ถ้ามี file_url คือไฟล์แนบ
+  const products = sheetData.filter(item => !item.file_url); 
+  const uploads = sheetData.filter(item => item.file_url);   
 
   // ฟังก์ชัน Login
   const handleLogin = async (e) => {
@@ -123,10 +123,9 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
 
-    // ✅ 1. ตรวจสอบว่ามีไฟล์อยู่แล้วหรือไม่ (จำกัด 1 ไฟล์)
     if (uploads.length >= 1) {
       alert("คุณสามารถอัปโหลดได้เพียง 1 ไฟล์เท่านั้น\nกรุณาลบไฟล์เดิมออกก่อน");
-      e.target.value = null; // ล้างค่า input
+      e.target.value = null; 
       return;
     }
 
@@ -162,27 +161,25 @@ export default function App() {
     }
   };
 
-  // ✅ ฟังก์ชันลบไฟล์
+  // ฟังก์ชันลบไฟล์
   const handleDeleteFile = async (docId, fileUrl) => {
     if (!window.confirm("คุณต้องการลบไฟล์นี้ใช่หรือไม่?")) return;
 
     setDataLoading(true);
     try {
-      // 1. ลบไฟล์ออกจาก Storage (ถ้ามี URL)
       if (fileUrl) {
         try {
           const fileRef = ref(storage, fileUrl);
           await deleteObject(fileRef);
         } catch (storageErr) {
-          console.warn("ไม่สามารถลบไฟล์จาก Storage ได้ (อาจจะถูกลบไปแล้ว)", storageErr);
+          console.warn("ไม่สามารถลบไฟล์จาก Storage ได้", storageErr);
         }
       }
 
-      // 2. ลบข้อมูลออกจาก Firestore (Database)
       await deleteDoc(doc(db, "data", docId));
 
       alert("ลบไฟล์เรียบร้อยแล้ว");
-      fetchData(user.username); // รีเฟรชตาราง
+      fetchData(user.username); 
 
     } catch (err) {
       console.error("Delete failed", err);
@@ -236,6 +233,25 @@ export default function App() {
       day: '2-digit', month: 'short', year: '2-digit',
       hour: '2-digit', minute: '2-digit'
     });
+  };
+
+  // ✅ Helper ตัดชื่อไฟล์ให้สั้นลง (แสดงหัว...ท้าย)
+  const truncateFileName = (name, maxLength = 25) => {
+    if (!name) return "";
+    if (name.length <= maxLength) return name;
+    
+    // พยายามแยกนามสกุลไฟล์
+    const lastDotIndex = name.lastIndexOf('.');
+    if (lastDotIndex === -1) return name.substring(0, maxLength) + "..."; // ไม่มีนามสกุล
+
+    const extension = name.substring(lastDotIndex); // .pdf, .png
+    const nameWithoutExt = name.substring(0, lastDotIndex);
+    
+    const keepLength = maxLength - 3 - extension.length; // 3 คือจุด ...
+    
+    if (keepLength < 1) return name.substring(0, maxLength) + "...";
+    
+    return `${nameWithoutExt.substring(0, keepLength)}...${extension}`;
   };
 
   // ---------------- UI Components ----------------
@@ -358,29 +374,6 @@ export default function App() {
           </div>
           
           <div className="flex gap-2">
-            <label className={`
-                flex items-center gap-2 px-4 py-2 rounded-lg border shadow-sm transition-all cursor-pointer
-                ${uploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 
-                  (uploads.length >= 1 ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700')}
-            `}
-            // ถ้าอัปโหลดครบ 1 ไฟล์แล้ว ให้คลิกปุ่มนี้แล้วแจ้งเตือนแทน
-            onClick={(e) => {
-              if (uploads.length >= 1) {
-                e.preventDefault();
-                alert("คุณมีเอกสารแล้ว 1 ไฟล์ กรุณาลบไฟล์เดิมก่อนอัปโหลดใหม่");
-              }
-            }}
-            >
-              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
-              <span className="text-sm font-medium">{uploading ? 'กำลังอัป...' : (uploads.length >= 1 ? 'ครบจำนวนแล้ว' : 'อัปโหลดเอกสาร')}</span>
-              <input 
-                type="file" 
-                className="hidden" 
-                onChange={handleFileUpload} 
-                disabled={uploading || uploads.length >= 1}
-              />
-            </label>
-
             <button 
               onClick={() => fetchData(user?.username)}
               disabled={dataLoading}
@@ -392,7 +385,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* === ตารางที่ 1: ข้อมูลสินค้า (จาก Google Sheets/Firebase) === */}
+        {/* === ตารางที่ 1: ข้อมูลสินค้า === */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
             <Database className="w-5 h-5 text-gray-400" />
@@ -436,11 +429,36 @@ export default function App() {
           )}
         </div>
 
-        {/* === ตารางที่ 2: เอกสารที่อัปโหลด (Uploads) === */}
+        {/* === ตารางที่ 2: เอกสารที่อัปโหลด === */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 bg-indigo-50 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-indigo-500" />
-            <h3 className="font-semibold text-indigo-900">เอกสารที่อัปโหลด (Uploaded Files)</h3>
+          <div className="px-6 py-4 border-b border-gray-100 bg-indigo-50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-indigo-500" />
+                <h3 className="font-semibold text-indigo-900">เอกสารที่อัปโหลด (Uploaded Files)</h3>
+            </div>
+            
+            {/* ย้ายปุ่มอัปโหลดมาไว้ตรงนี้ */}
+            <label className={`
+                flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm transition-all cursor-pointer text-xs
+                ${uploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 
+                  (uploads.length >= 1 ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700')}
+            `}
+            onClick={(e) => {
+              if (uploads.length >= 1) {
+                e.preventDefault();
+                alert("คุณมีเอกสารแล้ว 1 ไฟล์ กรุณาลบไฟล์เดิมก่อนอัปโหลดใหม่");
+              }
+            }}
+            >
+              {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <UploadCloud className="w-3 h-3" />}
+              <span className="font-medium">{uploading ? 'กำลังอัป...' : (uploads.length >= 1 ? 'ครบจำนวนแล้ว' : 'อัปโหลดเอกสาร')}</span>
+              <input 
+                type="file" 
+                className="hidden" 
+                onChange={handleFileUpload} 
+                disabled={uploading || uploads.length >= 1}
+              />
+            </label>
           </div>
 
           {dataLoading ? (
@@ -460,8 +478,9 @@ export default function App() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {uploads.map((file, idx) => (
                     <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {file.product || "ไม่มีชื่อ"}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" title={file.product}>
+                        {/* ✅ ใช้ฟังก์ชัน truncateFileName เพื่อแสดงชื่อย่อ */}
+                        {truncateFileName(file.product || "ไม่มีชื่อ")}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-400" />
@@ -476,7 +495,6 @@ export default function App() {
                         >
                           <FileText className="w-4 h-4" /> เปิดดู
                         </a>
-                        {/* ✅ ปุ่มลบ (สีแดง) */}
                         <button 
                           onClick={() => handleDeleteFile(file.id, file.file_url)}
                           className="inline-flex items-center gap-1 text-red-600 hover:text-red-800 hover:underline font-medium border border-red-200 bg-red-50 px-3 py-1.5 rounded-lg transition-all hover:shadow-sm"
