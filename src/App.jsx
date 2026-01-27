@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, User, Database, ArrowRight, Table, AlertCircle, LogOut, UserCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Lock, User, Database, ArrowRight, Table, AlertCircle, LogOut, UserCircle, Loader2, RefreshCw, UploadCloud, FileText } from 'lucide-react';
 
 // ------------------------------------------------------------------
-// 1. นำเข้า Firebase SDK
+// 1. นำเข้า Firebase SDK (เพิ่ม Storage และ addDoc)
 // ------------------------------------------------------------------
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
+import { getFirestore, collection, query, where, getDocs, addDoc } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // ==========================================
 // ⚠️ ส่วนที่ต้องแก้ไข (FIREBASE CONFIGURATION) ⚠️
@@ -24,13 +25,13 @@ const firebaseConfig = {
 // ==========================================
 
 // 2. เริ่มต้นใช้งาน Firebase
-// เช็คว่าใส่ Config หรือยัง เพื่อกัน Error หน้าขาว
-let auth, db;
+let auth, db, storage;
 try {
   if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "AIzaSy...") {
     const app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
+    storage = getStorage(app); // เริ่มต้นใช้งาน Storage
   }
 } catch (e) {
   console.error("Firebase Init Error:", e);
@@ -39,7 +40,8 @@ try {
 export default function App() {
   const [view, setView] = useState('login'); 
   const [loading, setLoading] = useState(false);     
-  const [dataLoading, setDataLoading] = useState(false); 
+  const [dataLoading, setDataLoading] = useState(false);
+  const [uploading, setUploading] = useState(false); // สถานะหมุนๆ ตอนอัปโหลด
   const [error, setError] = useState('');
   
   const [username, setUsername] = useState('');
@@ -48,43 +50,38 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [sheetData, setSheetData] = useState([]);
 
-  // ฟังก์ชัน Login ด้วย Firebase
+  // ฟังก์ชัน Login
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     if (!auth) {
-      setError('⚠️ ยังไม่ได้ใส่ Firebase Config ในโค้ด (ดูบรรทัดที่ 15)');
+      setError('⚠️ ยังไม่ได้ใส่ Firebase Config ในโค้ด (ดูบรรทัดที่ 16)');
       setLoading(false);
       return;
     }
 
     try {
-      // แปลง Username เป็น Email (เพราะ Firebase บังคับใช้อีเมล)
-      // สมมติว่า User พิมพ์แค่ "admin" เราจะเติม "@test.com" ให้เองอัตโนมัติ
-      // หรือถ้าเขาพิมพ์อีเมลมาเต็มๆ ก็ใช้ได้เลย
+      // แปลง Username เป็น Email
       const emailToUse = username.includes('@') ? username : `${username}@test.com`;
 
       const userCredential = await signInWithEmailAndPassword(auth, emailToUse, password);
       const firebaseUser = userCredential.user;
       
-      // ดึงชื่อ Username หน้า @ มาแสดง
       const displayUsername = firebaseUser.email.split('@')[0];
 
       const userData = { 
         name: displayUsername, 
-        username: displayUsername, // ใช้ชื่อนี้ไป query ข้อมูล
+        username: displayUsername, 
         email: firebaseUser.email 
       };
       
       setUser(userData);
       
-      // สั่งให้หมุนรอก่อนเปลี่ยนหน้า
       setDataLoading(true); 
       setView('dashboard');
       
-      // ดึงข้อมูล
       fetchData(userData.username); 
 
     } catch (err) {
@@ -99,7 +96,7 @@ export default function App() {
     }
   };
 
-  // ฟังก์ชันดึงข้อมูลจาก Firestore
+  // ฟังก์ชันดึงข้อมูล
   const fetchData = async (currentUsername) => {
     const userToFetch = currentUsername || user?.username;
     if (!userToFetch || !db) return;
@@ -107,7 +104,6 @@ export default function App() {
     setDataLoading(true); 
     
     try {
-      // Query ข้อมูลจาก Collection "data" ที่มี field "username" ตรงกับคนล็อกอิน
       const q = query(
         collection(db, "data"), 
         where("username", "==", userToFetch)
@@ -117,7 +113,6 @@ export default function App() {
       
       const fetchedData = [];
       querySnapshot.forEach((doc) => {
-        // นำข้อมูลออกมา และแถม ID ของเอกสารไปด้วย (เผื่อใช้)
         fetchedData.push({ id: doc.id, ...doc.data() });
       });
 
@@ -125,12 +120,55 @@ export default function App() {
 
     } catch (err) {
       console.error("Failed to fetch data", err);
-      // กรณี ErrorPermission (มักเกิดจากลืมตั้ง Rules หรือ Index)
       if (err.code === 'permission-denied') {
         alert("Permission Denied: ตรวจสอบ Firestore Rules ใน Console");
       }
     } finally {
       setDataLoading(false); 
+    }
+  };
+
+  // ✅ ฟังก์ชันอัปโหลดไฟล์
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // ตรวจสอบขนาดไฟล์ (เช่น ไม่เกิน 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("ไฟล์ขนาดใหญ่เกินไป (จำกัด 5MB)");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      // 1. สร้าง Reference ไปที่ Storage (ตั้งชื่อไฟล์ไม่ให้ซ้ำด้วย Date.now)
+      const storageRef = ref(storage, `uploads/${user.username}/${Date.now()}_${file.name}`);
+      
+      // 2. อัปโหลดไฟล์ขึ้น Storage
+      const snapshot = await uploadBytes(storageRef, file);
+      
+      // 3. ขอ URL ดาวน์โหลด
+      const downloadURL = await getDownloadURL(snapshot.ref);
+
+      // 4. บันทึกข้อมูลไฟล์ลง Firestore (เพื่อให้โชว์ในตารางทันที)
+      await addDoc(collection(db, "data"), {
+        username: user.username,
+        product: "เอกสารแนบ: " + file.name,
+        price: 0, 
+        status: "uploaded",
+        file_url: downloadURL, // เก็บลิงก์ไฟล์ไว้ในนี้
+        uploaded_at: new Date().toISOString()
+      });
+
+      alert("✅ อัปโหลดสำเร็จ!");
+      fetchData(user.username); // รีเฟรชตาราง
+
+    } catch (err) {
+      console.error("Upload failed", err);
+      alert("การอัปโหลดล้มเหลว: " + err.message);
+    } finally {
+      setUploading(false);
+      e.target.value = null; // ล้างค่า input
     }
   };
 
@@ -143,17 +181,15 @@ export default function App() {
     setView('login');
   };
 
-  // ✅ Helper ฟังก์ชันสำหรับจัดการคอลัมน์ (ซ่อน id และเรียง username ไว้หน้า)
+  // Helper จัดลำดับคอลัมน์ (ซ่อน id, เรียง username ไว้หน้า, ซ่อนข้อมูลระบบ)
   const getVisibleColumns = () => {
     if (sheetData.length === 0) return [];
     
-    // 1. ดึงคีย์ทั้งหมดออกมา
     const allKeys = Object.keys(sheetData[0]);
-    
-    // 2. กรอง 'id' ออก (ไม่ว่าจะ id เล็กหรือใหญ่)
-    const filteredKeys = allKeys.filter(key => key.toLowerCase() !== 'id');
+    // กรอง id และ uploaded_at ออก
+    const filteredKeys = allKeys.filter(key => key.toLowerCase() !== 'id' && key !== 'uploaded_at');
 
-    // 3. ถ้ามีคอลัมน์ 'username' ให้ย้ายมาไว้ตัวแรกสุด
+    // ย้าย username มาหน้าสุด
     if (filteredKeys.includes('username')) {
       const otherKeys = filteredKeys.filter(key => key !== 'username');
       return ['username', ...otherKeys];
@@ -166,13 +202,14 @@ export default function App() {
 
   if (view === 'login') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-red-100 flex items-center justify-center p-4 font-sans">
+      // 🎨 ใช้ธีมสีน้ำเงิน (Indigo)
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 flex items-center justify-center p-4 font-sans">
         <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
           <div className="bg-indigo-600 p-6 text-center">
             <div className="mx-auto bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm">
               <Database className="text-white w-8 h-8" />
             </div>
-            <h2 className="text-2xl font-bold text-white">ระบบสมาชิกฐานข้อมูล</h2>
+            <h2 className="text-2xl font-bold text-white">ระบบสมาชิก Firebase</h2>
             <p className="text-indigo-100 text-sm mt-1">รวดเร็ว ปลอดภัย รองรับผู้ใช้ไม่จำกัด</p>
           </div>
 
@@ -185,6 +222,13 @@ export default function App() {
                 </div>
                 <span className="text-xs opacity-90">{error}</span>
               </div>
+            )}
+            
+            {(!firebaseConfig.apiKey || firebaseConfig.apiKey === "AIzaSy...") && (
+               <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm text-center animate-pulse">
+                 <b>Developer Alert:</b><br/>
+                 กรุณาใส่ Firebase Config ในไฟล์ App.jsx (บรรทัดที่ 16)
+               </div>
             )}
 
             <div className="space-y-4 pt-2">
@@ -211,7 +255,7 @@ export default function App() {
                 />
               </div>
               <p className="text-xs text-gray-400 text-center">
-                หากพบปัญหาการใช้งานกรุณาติดต่อ
+                *ระบบจะเติม @test.com ให้ username อัตโนมัติ (Mock Email)
               </p>
             </div>
 
@@ -246,7 +290,7 @@ export default function App() {
               <div className="bg-indigo-600 p-1.5 rounded-lg">
                 <Database className="text-white w-5 h-5" />
               </div>
-              <span className="font-bold text-gray-800 text-lg hidden sm:block">ระบบสมาชิกฐานข้อมูล</span>
+              <span className="font-bold text-gray-800 text-lg hidden sm:block">Firebase System</span>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
@@ -269,33 +313,52 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">ข้อมูลส่วนตัวของคุณ</h1>
+            <h1 className="text-2xl font-bold text-gray-900">ข้อมูลส่วนตัว</h1>
             <p className="text-gray-500 mt-1 text-sm">
-              สวัสดีคุณ <b>{user?.username}</b>
+              แสดงรายการสำหรับ: <b>{user?.username}</b>
             </p>
           </div>
-          <button 
-            onClick={() => fetchData(user?.username)}
-            disabled={dataLoading}
-            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2"
-          >
-             {dataLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-             รีเฟรชข้อมูล
-          </button>
+          
+          <div className="flex gap-2">
+            {/* ✅ ปุ่มอัปโหลดเอกสาร */}
+            <label className={`
+                flex items-center gap-2 px-4 py-2 rounded-lg border shadow-sm transition-all cursor-pointer
+                ${uploading ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'}
+            `}>
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+              <span className="text-sm font-medium">{uploading ? 'กำลังอัป...' : 'อัปโหลดเอกสาร'}</span>
+              {/* Input ซ่อนอยู่ แต่ทำงานเมื่อกด Label */}
+              <input 
+                type="file" 
+                className="hidden" 
+                onChange={handleFileUpload} 
+                disabled={uploading}
+              />
+            </label>
+
+            <button 
+              onClick={() => fetchData(user?.username)}
+              disabled={dataLoading}
+              className="text-sm text-indigo-600 hover:text-indigo-800 font-medium bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2"
+            >
+               {dataLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+               รีเฟรช
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[300px]">
           {dataLoading ? (
             <div className="flex flex-col items-center justify-center h-[300px] text-gray-500">
                <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mb-3" />
-               <p className="font-medium">กำลังโหลดข้อมูล...</p>
+               <p className="font-medium">กำลังโหลดข้อมูลจาก Firebase...</p>
             </div>
           ) : sheetData.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    {/* ✅ ใช้ getVisibleColumns() แทน Object.keys() */}
+                    {/* ใช้ฟังก์ชัน getVisibleColumns เพื่อเรียงและซ่อนคอลัมน์ */}
                     {getVisibleColumns().map((header, idx) => (
                       <th key={idx} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         {header}
@@ -306,10 +369,21 @@ export default function App() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {sheetData.map((row, idx) => (
                     <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                      {/* ✅ ใช้ getVisibleColumns() เพื่อให้ข้อมูลตรงกับหัวข้อ */}
                       {getVisibleColumns().map((key, cellIdx) => (
                         <td key={cellIdx} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {typeof row[key] === 'object' ? JSON.stringify(row[key]) : row[key]}
+                          {/* ตรวจสอบว่าเป็น Link ไฟล์หรือไม่ ถ้าใช่ให้เปลี่ยนเป็นปุ่มกด */}
+                          {typeof row[key] === 'string' && row[key].startsWith('http') ? (
+                            <a 
+                              href={row[key]} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline font-medium border border-indigo-200 bg-indigo-50 px-2 py-1 rounded"
+                            >
+                              <FileText className="w-4 h-4" /> เปิดไฟล์
+                            </a>
+                          ) : (
+                            typeof row[key] === 'object' ? JSON.stringify(row[key]) : row[key]
+                          )}
                         </td>
                       ))}
                     </tr>
