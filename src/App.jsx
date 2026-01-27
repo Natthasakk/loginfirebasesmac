@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, User, Database, ArrowRight, Table, AlertCircle, LogOut, UserCircle, Loader2, RefreshCw, UploadCloud, FileText } from 'lucide-react';
+import { Lock, User, Database, ArrowRight, Table, AlertCircle, LogOut, UserCircle, Loader2, RefreshCw, UploadCloud, FileText, Calendar, Trash2 } from 'lucide-react';
 
 // ------------------------------------------------------------------
-// 1. นำเข้า Firebase SDK (เพิ่ม Storage และ addDoc)
+// 1. นำเข้า Firebase SDK
 // ------------------------------------------------------------------
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { getFirestore, collection, query, where, getDocs, addDoc } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getFirestore, collection, query, where, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore"; // เพิ่ม deleteDoc, doc
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage"; // เพิ่ม deleteObject
 
 // ==========================================
 // ⚠️ ส่วนที่ต้องแก้ไข (FIREBASE CONFIGURATION) ⚠️
 // ==========================================
-// นำค่า firebaseConfig ที่ได้จาก Firebase Console มาวางตรงนี้
 const firebaseConfig = {
   apiKey: "AIzaSyDrJK-b9BepfVJyFbuEjcXEq_pbNVGWizo",
   authDomain: "loginfirebasesmac.firebaseapp.com",
@@ -31,7 +30,7 @@ try {
     const app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
-    storage = getStorage(app); // เริ่มต้นใช้งาน Storage
+    storage = getStorage(app);
   }
 } catch (e) {
   console.error("Firebase Init Error:", e);
@@ -41,7 +40,7 @@ export default function App() {
   const [view, setView] = useState('login'); 
   const [loading, setLoading] = useState(false);     
   const [dataLoading, setDataLoading] = useState(false);
-  const [uploading, setUploading] = useState(false); // สถานะหมุนๆ ตอนอัปโหลด
+  const [uploading, setUploading] = useState(false); 
   const [error, setError] = useState('');
   
   const [username, setUsername] = useState('');
@@ -49,6 +48,10 @@ export default function App() {
   
   const [user, setUser] = useState(null);
   const [sheetData, setSheetData] = useState([]);
+
+  // --- แยกข้อมูลสินค้า และ ไฟล์อัปโหลด ออกจากกัน ---
+  const products = sheetData.filter(item => !item.file_url); // ถ้าไม่มี file_url คือสินค้า
+  const uploads = sheetData.filter(item => item.file_url);   // ถ้ามี file_url คือไฟล์แนบ
 
   // ฟังก์ชัน Login
   const handleLogin = async (e) => {
@@ -63,12 +66,9 @@ export default function App() {
     }
 
     try {
-      // แปลง Username เป็น Email
       const emailToUse = username.includes('@') ? username : `${username}@test.com`;
-
       const userCredential = await signInWithEmailAndPassword(auth, emailToUse, password);
       const firebaseUser = userCredential.user;
-      
       const displayUsername = firebaseUser.email.split('@')[0];
 
       const userData = { 
@@ -78,10 +78,8 @@ export default function App() {
       };
       
       setUser(userData);
-      
       setDataLoading(true); 
       setView('dashboard');
-      
       fetchData(userData.username); 
 
     } catch (err) {
@@ -102,73 +100,95 @@ export default function App() {
     if (!userToFetch || !db) return;
 
     setDataLoading(true); 
-    
     try {
       const q = query(
         collection(db, "data"), 
         where("username", "==", userToFetch)
       );
-
       const querySnapshot = await getDocs(q);
-      
       const fetchedData = [];
       querySnapshot.forEach((doc) => {
         fetchedData.push({ id: doc.id, ...doc.data() });
       });
-
       setSheetData(fetchedData);
-
     } catch (err) {
       console.error("Failed to fetch data", err);
-      if (err.code === 'permission-denied') {
-        alert("Permission Denied: ตรวจสอบ Firestore Rules ใน Console");
-      }
     } finally {
       setDataLoading(false); 
     }
   };
 
-  // ✅ ฟังก์ชันอัปโหลดไฟล์
+  // ฟังก์ชันอัปโหลดไฟล์
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // ตรวจสอบขนาดไฟล์ (เช่น ไม่เกิน 5MB)
+    // ✅ 1. ตรวจสอบว่ามีไฟล์อยู่แล้วหรือไม่ (จำกัด 1 ไฟล์)
+    if (uploads.length >= 1) {
+      alert("คุณสามารถอัปโหลดได้เพียง 1 ไฟล์เท่านั้น\nกรุณาลบไฟล์เดิมออกก่อน");
+      e.target.value = null; // ล้างค่า input
+      return;
+    }
+
     if (file.size > 5 * 1024 * 1024) {
       alert("ไฟล์ขนาดใหญ่เกินไป (จำกัด 5MB)");
+      e.target.value = null;
       return;
     }
 
     setUploading(true);
     try {
-      // 1. สร้าง Reference ไปที่ Storage (ตั้งชื่อไฟล์ไม่ให้ซ้ำด้วย Date.now)
       const storageRef = ref(storage, `uploads/${user.username}/${Date.now()}_${file.name}`);
-      
-      // 2. อัปโหลดไฟล์ขึ้น Storage
       const snapshot = await uploadBytes(storageRef, file);
-      
-      // 3. ขอ URL ดาวน์โหลด
       const downloadURL = await getDownloadURL(snapshot.ref);
 
-      // 4. บันทึกข้อมูลไฟล์ลง Firestore (เพื่อให้โชว์ในตารางทันที)
       await addDoc(collection(db, "data"), {
         username: user.username,
-        product: "เอกสารแนบ: " + file.name,
-        price: 0, 
+        product: file.name, 
         status: "uploaded",
-        file_url: downloadURL, // เก็บลิงก์ไฟล์ไว้ในนี้
+        file_url: downloadURL,
         uploaded_at: new Date().toISOString()
       });
 
       alert("✅ อัปโหลดสำเร็จ!");
-      fetchData(user.username); // รีเฟรชตาราง
+      fetchData(user.username); 
 
     } catch (err) {
       console.error("Upload failed", err);
       alert("การอัปโหลดล้มเหลว: " + err.message);
     } finally {
       setUploading(false);
-      e.target.value = null; // ล้างค่า input
+      e.target.value = null; 
+    }
+  };
+
+  // ✅ ฟังก์ชันลบไฟล์
+  const handleDeleteFile = async (docId, fileUrl) => {
+    if (!window.confirm("คุณต้องการลบไฟล์นี้ใช่หรือไม่?")) return;
+
+    setDataLoading(true);
+    try {
+      // 1. ลบไฟล์ออกจาก Storage (ถ้ามี URL)
+      if (fileUrl) {
+        try {
+          const fileRef = ref(storage, fileUrl);
+          await deleteObject(fileRef);
+        } catch (storageErr) {
+          console.warn("ไม่สามารถลบไฟล์จาก Storage ได้ (อาจจะถูกลบไปแล้ว)", storageErr);
+        }
+      }
+
+      // 2. ลบข้อมูลออกจาก Firestore (Database)
+      await deleteDoc(doc(db, "data", docId));
+
+      alert("ลบไฟล์เรียบร้อยแล้ว");
+      fetchData(user.username); // รีเฟรชตาราง
+
+    } catch (err) {
+      console.error("Delete failed", err);
+      alert("เกิดข้อผิดพลาดในการลบ: " + err.message);
+    } finally {
+      setDataLoading(false);
     }
   };
 
@@ -181,36 +201,55 @@ export default function App() {
     setView('login');
   };
 
-  // Helper จัดลำดับคอลัมน์ (ซ่อน id, เรียง username ไว้หน้า, ซ่อนข้อมูลระบบ)
-  const getVisibleColumns = () => {
-    if (sheetData.length === 0) return [];
+  // Helper จัดลำดับคอลัมน์ (สำหรับตารางสินค้า)
+  const getProductColumns = () => {
+    if (products.length === 0) return [];
     
-    const allKeys = Object.keys(sheetData[0]);
-    // กรอง id และ uploaded_at ออก
-    const filteredKeys = allKeys.filter(key => key.toLowerCase() !== 'id' && key !== 'uploaded_at');
+    const allKeysSet = new Set();
+    products.forEach(row => {
+      Object.keys(row).forEach(key => allKeysSet.add(key));
+    });
+    const allKeys = Array.from(allKeysSet);
 
-    // ย้าย username มาหน้าสุด
-    if (filteredKeys.includes('username')) {
-      const otherKeys = filteredKeys.filter(key => key !== 'username');
-      return ['username', ...otherKeys];
-    }
+    const filteredKeys = allKeys.filter(key => 
+      key.toLowerCase() !== 'id' && 
+      key !== 'uploaded_at' && 
+      key !== 'file_url'
+    );
 
-    return filteredKeys;
+    const preferredOrder = ['username', 'product', 'price', 'status'];
+    
+    return filteredKeys.sort((a, b) => {
+      const indexA = preferredOrder.indexOf(a);
+      const indexB = preferredOrder.indexOf(b);
+      if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  };
+
+  const formatDate = (isoString) => {
+    if (!isoString) return "-";
+    const date = new Date(isoString);
+    return date.toLocaleDateString('th-TH', {
+      day: '2-digit', month: 'short', year: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    });
   };
 
   // ---------------- UI Components ----------------
 
   if (view === 'login') {
     return (
-      // 🎨 ใช้ธีมสีน้ำเงิน (Indigo)
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 flex items-center justify-center p-4 font-sans">
         <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
           <div className="bg-indigo-600 p-6 text-center">
             <div className="mx-auto bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm">
               <Database className="text-white w-8 h-8" />
             </div>
-            <h2 className="text-2xl font-bold text-white">ระบบสมาชิก Firebase</h2>
-            <p className="text-indigo-100 text-sm mt-1">รวดเร็ว ปลอดภัย รองรับผู้ใช้ไม่จำกัด</p>
+            <h2 className="text-2xl font-bold text-white">ระบบสมาชิก</h2>
+            <p className="text-indigo-100 text-sm mt-1">Firebase + Google Sheets</p>
           </div>
 
           <form onSubmit={handleLogin} className="p-8 space-y-6">
@@ -227,7 +266,7 @@ export default function App() {
             {(!firebaseConfig.apiKey || firebaseConfig.apiKey === "AIzaSy...") && (
                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm text-center animate-pulse">
                  <b>Developer Alert:</b><br/>
-                 กรุณาใส่ Firebase Config ในไฟล์ App.jsx (บรรทัดที่ 16)
+                 กรุณาใส่ Firebase Config ในไฟล์ App.jsx
                </div>
             )}
 
@@ -237,7 +276,7 @@ export default function App() {
                 <input
                   type="text"
                   required
-                  placeholder="Username (เช่น admin)"
+                  placeholder="Username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
@@ -254,9 +293,6 @@ export default function App() {
                   className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                 />
               </div>
-              <p className="text-xs text-gray-400 text-center">
-                *ระบบจะเติม @test.com ให้ username อัตโนมัติ (Mock Email)
-              </p>
             </div>
 
             <button
@@ -282,15 +318,15 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
+    <div className="min-h-screen bg-gray-50 font-sans pb-10">
+      <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center gap-2">
               <div className="bg-indigo-600 p-1.5 rounded-lg">
                 <Database className="text-white w-5 h-5" />
               </div>
-              <span className="font-bold text-gray-800 text-lg hidden sm:block">Firebase System</span>
+              <span className="font-bold text-gray-800 text-lg hidden sm:block">MySystem</span>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
@@ -310,29 +346,38 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        
+        {/* === ส่วนหัวและปุ่มควบคุม === */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">ข้อมูลส่วนตัว</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
             <p className="text-gray-500 mt-1 text-sm">
-              แสดงรายการสำหรับ: <b>{user?.username}</b>
+              จัดการข้อมูลและเอกสารของคุณ
             </p>
           </div>
           
           <div className="flex gap-2">
-            {/* ✅ ปุ่มอัปโหลดเอกสาร */}
             <label className={`
                 flex items-center gap-2 px-4 py-2 rounded-lg border shadow-sm transition-all cursor-pointer
-                ${uploading ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'}
-            `}>
+                ${uploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 
+                  (uploads.length >= 1 ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700')}
+            `}
+            // ถ้าอัปโหลดครบ 1 ไฟล์แล้ว ให้คลิกปุ่มนี้แล้วแจ้งเตือนแทน
+            onClick={(e) => {
+              if (uploads.length >= 1) {
+                e.preventDefault();
+                alert("คุณมีเอกสารแล้ว 1 ไฟล์ กรุณาลบไฟล์เดิมก่อนอัปโหลดใหม่");
+              }
+            }}
+            >
               {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
-              <span className="text-sm font-medium">{uploading ? 'กำลังอัป...' : 'อัปโหลดเอกสาร'}</span>
-              {/* Input ซ่อนอยู่ แต่ทำงานเมื่อกด Label */}
+              <span className="text-sm font-medium">{uploading ? 'กำลังอัป...' : (uploads.length >= 1 ? 'ครบจำนวนแล้ว' : 'อัปโหลดเอกสาร')}</span>
               <input 
                 type="file" 
                 className="hidden" 
                 onChange={handleFileUpload} 
-                disabled={uploading}
+                disabled={uploading || uploads.length >= 1}
               />
             </label>
 
@@ -347,43 +392,36 @@ export default function App() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[300px]">
+        {/* === ตารางที่ 1: ข้อมูลสินค้า (จาก Google Sheets/Firebase) === */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+            <Database className="w-5 h-5 text-gray-400" />
+            <h3 className="font-semibold text-gray-700">รายการข้อมูล (Data)</h3>
+          </div>
+          
           {dataLoading ? (
-            <div className="flex flex-col items-center justify-center h-[300px] text-gray-500">
-               <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mb-3" />
-               <p className="font-medium">กำลังโหลดข้อมูลจาก Firebase...</p>
+            <div className="flex flex-col items-center justify-center h-[200px] text-gray-500">
+               <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-2" />
+               <p className="text-sm">กำลังโหลดข้อมูล...</p>
             </div>
-          ) : sheetData.length > 0 ? (
+          ) : products.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-white">
                   <tr>
-                    {/* ใช้ฟังก์ชัน getVisibleColumns เพื่อเรียงและซ่อนคอลัมน์ */}
-                    {getVisibleColumns().map((header, idx) => (
-                      <th key={idx} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {getProductColumns().map((header, idx) => (
+                      <th key={idx} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
                         {header}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {sheetData.map((row, idx) => (
+                  {products.map((row, idx) => (
                     <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                      {getVisibleColumns().map((key, cellIdx) => (
+                      {getProductColumns().map((key, cellIdx) => (
                         <td key={cellIdx} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {/* ตรวจสอบว่าเป็น Link ไฟล์หรือไม่ ถ้าใช่ให้เปลี่ยนเป็นปุ่มกด */}
-                          {typeof row[key] === 'string' && row[key].startsWith('http') ? (
-                            <a 
-                              href={row[key]} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline font-medium border border-indigo-200 bg-indigo-50 px-2 py-1 rounded"
-                            >
-                              <FileText className="w-4 h-4" /> เปิดไฟล์
-                            </a>
-                          ) : (
-                            typeof row[key] === 'object' ? JSON.stringify(row[key]) : row[key]
-                          )}
+                          {typeof row[key] === 'object' ? JSON.stringify(row[key]) : row[key]}
                         </td>
                       ))}
                     </tr>
@@ -392,20 +430,73 @@ export default function App() {
               </table>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full p-12 text-center text-gray-400">
-              <Table className="w-16 h-16 mb-4 opacity-20" />
-              <p className="text-lg font-medium text-gray-500">ไม่พบข้อมูลของคุณ</p>
-              <div className="text-sm mt-3 bg-gray-50 p-4 rounded-lg max-w-md mx-auto text-left">
-                <p className="font-semibold text-gray-700 mb-1">สิ่งที่ต้องตรวจสอบใน Firestore:</p>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>Collection ชื่อ <code>data</code> หรือไม่?</li>
-                  <li>มี Field ชื่อ <code>username</code> ที่ค่าตรงกับ <b>"{user?.username}"</b> หรือไม่?</li>
-                  <li>ถ้าเพิ่งสร้าง Database อย่าลืมเลือก <b>"Start in test mode"</b> (หรือแก้ Rules ให้ read ได้)</li>
-                </ul>
-              </div>
+            <div className="p-10 text-center text-gray-400 text-sm">
+              ไม่พบข้อมูลรายการสินค้า
             </div>
           )}
         </div>
+
+        {/* === ตารางที่ 2: เอกสารที่อัปโหลด (Uploads) === */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 bg-indigo-50 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-indigo-500" />
+            <h3 className="font-semibold text-indigo-900">เอกสารที่อัปโหลด (Uploaded Files)</h3>
+          </div>
+
+          {dataLoading ? (
+            <div className="flex flex-col items-center justify-center h-[150px] text-gray-500">
+               <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mb-2" />
+            </div>
+          ) : uploads.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-white">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 w-1/2">ชื่อเอกสาร</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">วันที่อัปโหลด</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 text-right">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {uploads.map((file, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {file.product || "ไม่มีชื่อ"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-gray-400" />
+                        {formatDate(file.uploaded_at)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-right space-x-2">
+                        <a 
+                          href={file.file_url} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline font-medium border border-indigo-200 bg-indigo-50 px-3 py-1.5 rounded-lg transition-all hover:shadow-sm"
+                        >
+                          <FileText className="w-4 h-4" /> เปิดดู
+                        </a>
+                        {/* ✅ ปุ่มลบ (สีแดง) */}
+                        <button 
+                          onClick={() => handleDeleteFile(file.id, file.file_url)}
+                          className="inline-flex items-center gap-1 text-red-600 hover:text-red-800 hover:underline font-medium border border-red-200 bg-red-50 px-3 py-1.5 rounded-lg transition-all hover:shadow-sm"
+                        >
+                          <Trash2 className="w-4 h-4" /> ลบ
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-10 text-center text-gray-400 text-sm">
+              <UploadCloud className="w-10 h-10 mx-auto mb-2 opacity-20" />
+              ยังไม่มีเอกสารที่อัปโหลด
+            </div>
+          )}
+        </div>
+
       </main>
     </div>
   );
