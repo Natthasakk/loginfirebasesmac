@@ -13,7 +13,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "fire
 // ⚠️ ส่วนที่ต้องแก้ไข (FIREBASE CONFIGURATION) ⚠️
 // ==========================================
 const firebaseConfig = {
-  apiKey: "AIzaSyDrJK-b9BepfVJyFbuEjcXEq_pbNVGWizo",
+  apiKey: import.meta.env.VITE_API_KEY,
   authDomain: "loginfirebasesmac.firebaseapp.com",
   projectId: "loginfirebasesmac",
   storageBucket: "loginfirebasesmac.firebasestorage.app",
