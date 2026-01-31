@@ -214,7 +214,7 @@ export default function App() {
       key !== 'file_url'
     );
 
-    const preferredOrder = ['username', 'product', 'price', 'status'];
+    const preferredOrder = ['username', 'ชื่อ-สกุล', 'ชื่อสกุล(ผู้รับ)', 'ความเกี่ยวข้อง', 'สถานะ'];
     
     return filteredKeys.sort((a, b) => {
       const indexA = preferredOrder.indexOf(a);
