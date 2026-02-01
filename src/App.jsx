@@ -220,7 +220,7 @@ export default function App() {
       key !== 'file_url'
     );
 
-    const preferredOrder = ['username', 'ชื่อ-สกุล', 'ชื่อสกุล(ผู้รับ)', 'ความเกี่ยวข้อง', 'สถานะ'];
+    const preferredOrder = ['username', 'ชื่อ-สกุล', 'ชื่อสกุล(ผู้รับ)', 'ความเกี่ยวข้อง'];
     
     return filteredKeys.sort((a, b) => {
       const indexA = preferredOrder.indexOf(a);
