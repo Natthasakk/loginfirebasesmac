@@ -23,15 +23,21 @@ const firebaseConfig = {
 };
 // ==========================================
 
-// 2. เริ่มต้นใช้งาน Firebase
-let auth, db, storage;
+// ------------------------------------------------------------------
+// 2. เริ่มต้นใช้งาน Firebase (แก้ส่วนนี้ใหม่)
+// ------------------------------------------------------------------
+// ประกาศตัวแปร Global ไว้ (เพื่อให้ทุกฟังก์ชันเรียกใช้ได้)
+export let auth, db, storage;
+
 try {
-  if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "AIzaSy...") {
-    const app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    storage = getStorage(app);
-  }
+  // ไม่ต้องเช็ก if แล้ว สั่งเริ่มเลยเพราะเราใส่ Key ใน .env ครบแล้ว
+  const app = initializeApp(firebaseConfig);
+  
+  auth = getAuth(app);
+  db = getFirestore(app);
+  storage = getStorage(app);
+  
+  console.log("Firebase Connected Successfully!");
 } catch (e) {
   console.error("Firebase Init Error:", e);
 }
