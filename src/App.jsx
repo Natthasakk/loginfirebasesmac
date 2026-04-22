@@ -6,7 +6,7 @@ import { Lock, User, Database, ArrowRight, AlertCircle, LogOut, UserCircle, Load
 // ------------------------------------------------------------------
 import { auth, db, storage, firebaseConfig } from './firebase';
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 
 export default function App() {
@@ -21,10 +21,17 @@ export default function App() {
   
   const [user, setUser] = useState(null);
   const [sheetData, setSheetData] = useState([]);
+  const [filterStatus, setFilterStatus] = useState('ทั้งหมด');
 
   // --- แยกข้อมูลสินค้า และ ไฟล์อัปโหลด ออกจากกัน ---
   const products = sheetData.filter(item => !item.file_url); 
   const uploads = sheetData.filter(item => item.file_url);   
+
+  // กรองข้อมูลสินค้าตามสถานะที่เลือกใน Dropdown ด้านบน
+  const filteredProducts = products.filter(item => {
+    if (filterStatus === 'ทั้งหมด') return true;
+    return (item.status === filterStatus || item.สถานะ === filterStatus);
+  });
 
   // ฟังก์ชัน Login
   const handleLogin = async (e) => {
@@ -92,6 +99,20 @@ export default function App() {
       console.error("Failed to fetch data", err);
     } finally {
       setDataLoading(false); 
+    }
+  };
+
+  // ฟังก์ชันอัปเดตข้อมูล (แก้ไขฟิลด์ใน Firestore)
+  const handleUpdateData = async (docId, field, newValue) => {
+    if (!db) return;
+    try {
+      const docRef = doc(db, "data", docId);
+      await updateDoc(docRef, { [field]: newValue });
+      // อัปเดต state ทันทีเพื่อความลื่นไหล
+      setSheetData(prev => prev.map(item => item.id === docId ? { ...item, [field]: newValue } : item));
+    } catch (err) {
+      console.error("Update failed", err);
+      alert("ไม่สามารถอัปเดตข้อมูลได้: " + err.message);
     }
   };
 
@@ -191,7 +212,7 @@ export default function App() {
       key !== 'file_url'
     );
 
-    const preferredOrder = ['username', 'ชื่อ-สกุล', 'ชื่อสกุล(ผู้รับ)', 'ความเกี่ยวข้อง'];
+    const preferredOrder = ['username', 'ชื่อ-สกุล', 'ชื่อสกุล(ผู้รับ)', 'ความเกี่ยวข้อง', 'สถานะ', 'status'];
     
     return filteredKeys.sort((a, b) => {
       const indexA = preferredOrder.indexOf(a);
@@ -232,6 +253,9 @@ export default function App() {
   };
 
   // ---------------- UI Components ----------------
+
+  // ✅ รายการสถานะที่มีให้เลือกใน Dropdown
+  const statusOptions = ["รอดำเนินการ", "กำลังตรวจสอบ", "สำเร็จ", "ยกเลิก"];
 
   if (view === 'login') {
     return (
@@ -364,9 +388,26 @@ export default function App() {
 
         {/* === ตารางที่ 1: ข้อมูลสินค้า === */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
-            <Database className="w-5 h-5 text-gray-400" />
-            <h3 className="font-semibold text-gray-700">รายการข้อมูล (Data)</h3>
+          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-gray-400" />
+              <h3 className="font-semibold text-gray-700">รายการข้อมูล (Data)</h3>
+            </div>
+            
+            {/* ✅ Dropdown สำหรับกรองข้อมูล (ย้ายขึ้นมาไว้ด้านบน) */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 font-medium">กรองตามสถานะ:</span>
+              <select 
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all cursor-pointer shadow-sm hover:border-indigo-300"
+              >
+                <option value="ทั้งหมด">ทั้งหมด</option>
+                {statusOptions.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
           </div>
           
           {dataLoading ? (
@@ -374,7 +415,7 @@ export default function App() {
                <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-2" />
                <p className="text-sm">กำลังโหลดข้อมูล...</p>
             </div>
-          ) : products.length > 0 ? (
+          ) : filteredProducts.length > 0 ? (
             <>
               {/* Desktop Table View */}
               <div className="hidden md:block overflow-x-auto">
@@ -389,11 +430,22 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {products.map((row, idx) => (
+                    {filteredProducts.map((row, idx) => (
                       <tr key={idx} className="hover:bg-gray-50 transition-colors">
                         {getProductColumns().map((key, cellIdx) => (
                           <td key={cellIdx} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                            {typeof row[key] === 'object' ? JSON.stringify(row[key]) : row[key]}
+                            {key === 'สถานะ' || key === 'status' ? (
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                                row[key] === 'สำเร็จ' ? 'bg-green-100 text-green-700' :
+                                row[key] === 'กำลังตรวจสอบ' ? 'bg-blue-100 text-blue-700' :
+                                row[key] === 'ยกเลิก' ? 'bg-red-100 text-red-700' :
+                                'bg-yellow-100 text-yellow-700'
+                              }`}>
+                                {row[key] || "รอดำเนินการ"}
+                              </span>
+                            ) : (
+                              typeof row[key] === 'object' ? JSON.stringify(row[key]) : (row[key] || "-")
+                            )}
                           </td>
                         ))}
                       </tr>
@@ -404,14 +456,27 @@ export default function App() {
 
               {/* Mobile Card View */}
               <div className="md:hidden divide-y divide-gray-100">
-                {products.map((row, idx) => (
+                {filteredProducts.map((row, idx) => (
                   <div key={idx} className="p-5 space-y-3 bg-white active:bg-gray-50 transition-colors">
                     {getProductColumns().map((key, cellIdx) => (
                       <div key={cellIdx} className="flex flex-col">
                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{key}</span>
-                        <span className="text-sm text-gray-800 font-medium">
-                          {typeof row[key] === 'object' ? JSON.stringify(row[key]) : (row[key] || "-")}
-                        </span>
+                        {key === 'สถานะ' || key === 'status' ? (
+                          <div className="mt-1">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium inline-block ${
+                              row[key] === 'สำเร็จ' ? 'bg-green-100 text-green-700' :
+                              row[key] === 'กำลังตรวจสอบ' ? 'bg-blue-100 text-blue-700' :
+                              row[key] === 'ยกเลิก' ? 'bg-red-100 text-red-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {row[key] || "รอดำเนินการ"}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-800 font-medium">
+                            {typeof row[key] === 'object' ? JSON.stringify(row[key]) : (row[key] || "-")}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -420,7 +485,7 @@ export default function App() {
             </>
           ) : (
             <div className="p-10 text-center text-gray-400 text-sm">
-              ไม่พบข้อมูลรายการสินค้า
+              ไม่พบข้อมูลรายการที่ตรงตามเงื่อนไข
             </div>
           )}
         </div>
