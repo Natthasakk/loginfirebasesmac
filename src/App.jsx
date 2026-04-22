@@ -1,46 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Lock, User, Database, ArrowRight, Table, AlertCircle, LogOut, UserCircle, Loader2, RefreshCw, UploadCloud, FileText, Calendar, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Lock, User, Database, ArrowRight, AlertCircle, LogOut, UserCircle, Loader2, RefreshCw, UploadCloud, FileText, Calendar, Trash2 } from 'lucide-react';
 
 // ------------------------------------------------------------------
-// 1. นำเข้า Firebase SDK
+// 1. นำเข้า Firebase จากไฟล์ firebase.js
 // ------------------------------------------------------------------
-import { initializeApp } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { getFirestore, collection, query, where, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-
-// ==========================================
-// ⚠️ ส่วนที่ต้องแก้ไข (FIREBASE CONFIGURATION) ⚠️
-// ==========================================
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_API_KEY,
-  authDomain: "loginfirebasesmac.firebaseapp.com",
-  projectId: "loginfirebasesmac",
-  storageBucket: "loginfirebasesmac.firebasestorage.app",
-  messagingSenderId: "981441935732",
-  appId: "1:981441935732:web:d105a96938175b73ffd421",
-  measurementId: "G-F3Q9F390WV"
-};
-// ==========================================
-
-// ------------------------------------------------------------------
-// 2. เริ่มต้นใช้งาน Firebase (แก้ส่วนนี้ใหม่)
-// ------------------------------------------------------------------
-// ประกาศตัวแปร Global ไว้ (เพื่อให้ทุกฟังก์ชันเรียกใช้ได้)
-export let auth, db, storage;
-
-try {
-  // ไม่ต้องเช็ก if แล้ว สั่งเริ่มเลยเพราะเราใส่ Key ใน .env ครบแล้ว
-  const app = initializeApp(firebaseConfig);
-  
-  auth = getAuth(app);
-  db = getFirestore(app);
-  storage = getStorage(app);
-  
-  console.log("Firebase Connected Successfully!");
-} catch (e) {
-  console.error("Firebase Init Error:", e);
-}
+import { auth, db, storage, firebaseConfig } from './firebase';
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { collection, query, where, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 
 export default function App() {
   const [view, setView] = useState('login'); 
@@ -66,7 +33,7 @@ export default function App() {
     setLoading(true);
 
     if (!auth) {
-      setError('⚠️ ยังไม่ได้ใส่ Firebase Config ในโค้ด (ดูบรรทัดที่ 16)');
+      setError('⚠️ Firebase ไม่สามารถเริ่มต้นได้ กรุณาตรวจสอบ API Key ในไฟล์ .env');
       setLoading(false);
       return;
     }
@@ -89,11 +56,15 @@ export default function App() {
       fetchData(userData.username); 
 
     } catch (err) {
-      console.error(err);
+      console.error("Login error:", err);
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
         setError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+      } else if (err.code === 'auth/invalid-api-key') {
+        setError('API Key ไม่ถูกต้อง กรุณาตรวจสอบไฟล์ .env');
+      } else if (err.code === 'auth/network-request-failed') {
+        setError('การเชื่อมต่อเครือข่ายล้มเหลว กรุณาตรวจสอบอินเทอร์เน็ต');
       } else {
-        setError(`เกิดข้อผิดพลาด: ${err.message}`);
+        setError(`เกิดข้อผิดพลาด: ${err.message} (${err.code})`);
       }
     } finally {
       setLoading(false);
