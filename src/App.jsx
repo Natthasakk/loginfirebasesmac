@@ -312,24 +312,24 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-10">
-      <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+      <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center gap-2">
               <div className="bg-indigo-600 p-1.5 rounded-lg">
                 <Database className="text-white w-5 h-5" />
               </div>
-              <span className="font-bold text-gray-800 text-lg hidden sm:block">MySystem</span>
+              <span className="font-bold text-gray-800 text-lg sm:block">MySystem</span>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="flex items-center gap-1 sm:gap-2 text-sm text-gray-600 bg-gray-100 px-2 sm:px-3 py-1.5 rounded-full border border-gray-200">
                 <UserCircle className="w-4 h-4 text-indigo-500" />
-                <span className="hidden sm:inline">ผู้ใช้: </span>
-                <b className="text-indigo-700">{user?.username}</b>
+                <span className="hidden xs:inline">ผู้ใช้: </span>
+                <b className="text-indigo-700 truncate max-w-[80px] sm:max-w-none">{user?.username}</b>
               </div>
               <button
                 onClick={handleLogout}
-                className="text-gray-500 hover:text-red-600 transition-colors p-2"
+                className="text-gray-500 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"
                 title="ออกจากระบบ"
               >
                 <LogOut className="w-5 h-5" />
@@ -339,7 +339,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
         
         {/* === ส่วนหัวและปุ่มควบคุม === */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -354,7 +354,7 @@ export default function App() {
             <button 
               onClick={() => fetchData(user?.username)}
               disabled={dataLoading}
-              className="text-sm text-indigo-600 hover:text-indigo-800 font-medium bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2"
+              className="flex-1 sm:flex-none text-sm text-indigo-600 hover:text-indigo-800 font-medium bg-white px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2 active:scale-95"
             >
                {dataLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                รีเฟรช
@@ -363,8 +363,8 @@ export default function App() {
         </div>
 
         {/* === ตารางที่ 1: ข้อมูลสินค้า === */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
             <Database className="w-5 h-5 text-gray-400" />
             <h3 className="font-semibold text-gray-700">รายการข้อมูล (Data)</h3>
           </div>
@@ -375,30 +375,49 @@ export default function App() {
                <p className="text-sm">กำลังโหลดข้อมูล...</p>
             </div>
           ) : products.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-white">
-                  <tr>
-                    {getProductColumns().map((header, idx) => (
-                      <th key={idx} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                        {header}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {products.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                      {getProductColumns().map((key, cellIdx) => (
-                        <td key={cellIdx} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {typeof row[key] === 'object' ? JSON.stringify(row[key]) : row[key]}
-                        </td>
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-white">
+                    <tr>
+                      {getProductColumns().map((header, idx) => (
+                        <th key={idx} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                          {header}
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {products.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                        {getProductColumns().map((key, cellIdx) => (
+                          <td key={cellIdx} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {typeof row[key] === 'object' ? JSON.stringify(row[key]) : row[key]}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {products.map((row, idx) => (
+                  <div key={idx} className="p-5 space-y-3 bg-white active:bg-gray-50 transition-colors">
+                    {getProductColumns().map((key, cellIdx) => (
+                      <div key={cellIdx} className="flex flex-col">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{key}</span>
+                        <span className="text-sm text-gray-800 font-medium">
+                          {typeof row[key] === 'object' ? JSON.stringify(row[key]) : (row[key] || "-")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </>
           ) : (
             <div className="p-10 text-center text-gray-400 text-sm">
               ไม่พบข้อมูลรายการสินค้า
@@ -407,16 +426,15 @@ export default function App() {
         </div>
 
         {/* === ตารางที่ 2: เอกสารที่อัปโหลด === */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 bg-indigo-50 flex items-center justify-between">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 bg-indigo-50 flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-indigo-500" />
-                <h3 className="font-semibold text-indigo-900">เอกสารที่อัปโหลด (Uploaded Files)</h3>
+                <h3 className="font-semibold text-indigo-900">เอกสารที่อัปโหลด</h3>
             </div>
             
-            {/* ย้ายปุ่มอัปโหลดมาไว้ตรงนี้ */}
             <label className={`
-                flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm transition-all cursor-pointer text-xs
+                w-full xs:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-xl border shadow-sm transition-all cursor-pointer text-sm font-medium active:scale-95
                 ${uploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 
                   (uploads.length >= 1 ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700')}
             `}
@@ -427,8 +445,8 @@ export default function App() {
               }
             }}
             >
-              {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <UploadCloud className="w-3 h-3" />}
-              <span className="font-medium">{uploading ? 'กำลังอัป...' : (uploads.length >= 1 ? 'ครบจำนวนแล้ว' : 'อัปโหลดเอกสาร')}</span>
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+              <span>{uploading ? 'กำลังอัป...' : (uploads.length >= 1 ? 'ครบจำนวนแล้ว' : 'อัปโหลดเอกสาร')}</span>
               <input 
                 type="file" 
                 className="hidden" 
@@ -443,47 +461,94 @@ export default function App() {
                <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mb-2" />
             </div>
           ) : uploads.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-white">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 w-1/2">ชื่อเอกสาร</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">วันที่อัปโหลด</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 text-right">จัดการ</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {uploads.map((file, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" title={file.product}>
-                        {/* ✅ ใช้ฟังก์ชัน truncateFileName เพื่อแสดงชื่อย่อ */}
-                        {truncateFileName(file.product || "ไม่มีชื่อ")}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        {formatDate(file.uploaded_at)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-right space-x-2">
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-white">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 w-1/2">ชื่อเอกสาร</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">วันที่อัปโหลด</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 text-right">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {uploads.map((file, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" title={file.product}>
+                          {truncateFileName(file.product || "ไม่มีชื่อ")}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-gray-400" />
+                            {formatDate(file.uploaded_at)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right space-x-2">
+                          <a 
+                            href={file.file_url} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-medium border border-indigo-200 bg-indigo-50 px-3 py-1.5 rounded-lg transition-all"
+                          >
+                            <FileText className="w-4 h-4" /> เปิดดู
+                          </a>
+                          <button 
+                            onClick={() => handleDeleteFile(file.id, file.file_url)}
+                            className="inline-flex items-center gap-1 text-red-600 hover:text-red-800 font-medium border border-red-200 bg-red-50 px-3 py-1.5 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" /> ลบ
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {uploads.map((file, idx) => (
+                  <div key={idx} className="p-5 space-y-4 bg-white">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">ชื่อเอกสาร</span>
+                      <span className="text-sm font-semibold text-gray-900 break-words line-clamp-2 leading-relaxed">
+                        {file.product || "ไม่มีชื่อ"}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between items-end pt-1">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">วันที่อัปโหลด</span>
+                        <span className="text-xs text-gray-600 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {formatDate(file.uploaded_at)}
+                        </span>
+                      </div>
+                      
+                      <div className="flex gap-2">
                         <a 
                           href={file.file_url} 
                           target="_blank" 
                           rel="noreferrer" 
-                          className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline font-medium border border-indigo-200 bg-indigo-50 px-3 py-1.5 rounded-lg transition-all hover:shadow-sm"
+                          className="p-2.5 text-indigo-600 border border-indigo-100 bg-indigo-50 rounded-xl active:scale-90 transition-transform"
+                          title="เปิดดู"
                         >
-                          <FileText className="w-4 h-4" /> เปิดดู
+                          <FileText className="w-6 h-6" />
                         </a>
                         <button 
                           onClick={() => handleDeleteFile(file.id, file.file_url)}
-                          className="inline-flex items-center gap-1 text-red-600 hover:text-red-800 hover:underline font-medium border border-red-200 bg-red-50 px-3 py-1.5 rounded-lg transition-all hover:shadow-sm"
+                          className="p-2.5 text-red-600 border border-red-100 bg-red-50 rounded-xl active:scale-90 transition-transform"
+                          title="ลบ"
                         >
-                          <Trash2 className="w-4 h-4" /> ลบ
+                          <Trash2 className="w-6 h-6" />
                         </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           ) : (
             <div className="p-10 text-center text-gray-400 text-sm">
               <UploadCloud className="w-10 h-10 mx-auto mb-2 opacity-20" />
