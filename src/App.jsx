@@ -1,19 +1,17 @@
 import React, { useState } from 'react';
-import { Lock, User, Database, ArrowRight, AlertCircle, LogOut, UserCircle, Loader2, RefreshCw, UploadCloud, FileText, Calendar, Trash2 } from 'lucide-react';
+import { Lock, User, Database, ArrowRight, AlertCircle, LogOut, UserCircle, Loader2, RefreshCw } from 'lucide-react';
 
 // ------------------------------------------------------------------
 // 1. นำเข้า Firebase จากไฟล์ firebase.js
 // ------------------------------------------------------------------
-import { auth, db, storage, firebaseConfig } from './firebase';
+import { auth, db, firebaseConfig } from './firebase';
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore";
 
 export default function App() {
   const [view, setView] = useState('login'); 
   const [loading, setLoading] = useState(false);     
   const [dataLoading, setDataLoading] = useState(false);
-  const [uploading, setUploading] = useState(false); 
   const [error, setError] = useState('');
   
   const [username, setUsername] = useState('');
@@ -23,12 +21,8 @@ export default function App() {
   const [sheetData, setSheetData] = useState([]);
   const [filterStatus, setFilterStatus] = useState('ทั้งหมด');
 
-  // --- แยกข้อมูลสินค้า และ ไฟล์อัปโหลด ออกจากกัน ---
-  const products = sheetData.filter(item => !item.file_url); 
-  const uploads = sheetData.filter(item => item.file_url);   
-
   // กรองข้อมูลสินค้าตามสถานะที่เลือกใน Dropdown ด้านบน
-  const filteredProducts = products.filter(item => {
+  const filteredProducts = sheetData.filter(item => {
     if (filterStatus === 'ทั้งหมด') return true;
     return (item.status === filterStatus || item.สถานะ === filterStatus);
   });
@@ -40,7 +34,7 @@ export default function App() {
     setLoading(true);
 
     if (!auth) {
-      setError('⚠️ Firebase ไม่สามารถเริ่มต้นได้ กรุณาตรวจสอบ API Key ในไฟล์ .env');
+      setError('⚠️ Firebase ไม่สามารถเริ่มต้นได้ กรุณาตรวจสอบ API Key');
       setLoading(false);
       return;
     }
@@ -64,15 +58,7 @@ export default function App() {
 
     } catch (err) {
       console.error("Login error:", err);
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-        setError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
-      } else if (err.code === 'auth/invalid-api-key') {
-        setError('API Key ไม่ถูกต้อง กรุณาตรวจสอบไฟล์ .env');
-      } else if (err.code === 'auth/network-request-failed') {
-        setError('การเชื่อมต่อเครือข่ายล้มเหลว กรุณาตรวจสอบอินเทอร์เน็ต');
-      } else {
-        setError(`เกิดข้อผิดพลาด: ${err.message} (${err.code})`);
-      }
+      setError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
     } finally {
       setLoading(false);
     }
@@ -102,91 +88,6 @@ export default function App() {
     }
   };
 
-  // ฟังก์ชันอัปเดตข้อมูล (แก้ไขฟิลด์ใน Firestore)
-  const handleUpdateData = async (docId, field, newValue) => {
-    if (!db) return;
-    try {
-      const docRef = doc(db, "data", docId);
-      await updateDoc(docRef, { [field]: newValue });
-      // อัปเดต state ทันทีเพื่อความลื่นไหล
-      setSheetData(prev => prev.map(item => item.id === docId ? { ...item, [field]: newValue } : item));
-    } catch (err) {
-      console.error("Update failed", err);
-      alert("ไม่สามารถอัปเดตข้อมูลได้: " + err.message);
-    }
-  };
-
-  // ฟังก์ชันอัปโหลดไฟล์
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    if (uploads.length >= 1) {
-      alert("คุณสามารถอัปโหลดได้เพียง 1 ไฟล์เท่านั้น\nกรุณาลบไฟล์เดิมออกก่อน");
-      e.target.value = null; 
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert("ไฟล์ขนาดใหญ่เกินไป (จำกัด 5MB)");
-      e.target.value = null;
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const storageRef = ref(storage, `uploads/${user.username}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-
-      await addDoc(collection(db, "data"), {
-        username: user.username,
-        product: file.name, 
-        status: "uploaded",
-        file_url: downloadURL,
-        uploaded_at: new Date().toISOString()
-      });
-
-      alert("✅ อัปโหลดสำเร็จ!");
-      fetchData(user.username); 
-
-    } catch (err) {
-      console.error("Upload failed", err);
-      alert("การอัปโหลดล้มเหลว: " + err.message);
-    } finally {
-      setUploading(false);
-      e.target.value = null; 
-    }
-  };
-
-  // ฟังก์ชันลบไฟล์
-  const handleDeleteFile = async (docId, fileUrl) => {
-    if (!window.confirm("คุณต้องการลบไฟล์นี้ใช่หรือไม่?")) return;
-
-    setDataLoading(true);
-    try {
-      if (fileUrl) {
-        try {
-          const fileRef = ref(storage, fileUrl);
-          await deleteObject(fileRef);
-        } catch (storageErr) {
-          console.warn("ไม่สามารถลบไฟล์จาก Storage ได้", storageErr);
-        }
-      }
-
-      await deleteDoc(doc(db, "data", docId));
-
-      alert("ลบไฟล์เรียบร้อยแล้ว");
-      fetchData(user.username); 
-
-    } catch (err) {
-      console.error("Delete failed", err);
-      alert("เกิดข้อผิดพลาดในการลบ: " + err.message);
-    } finally {
-      setDataLoading(false);
-    }
-  };
-
   const handleLogout = async () => {
     if (auth) await signOut(auth);
     setUser(null);
@@ -196,12 +97,12 @@ export default function App() {
     setView('login');
   };
 
-  // Helper จัดลำดับคอลัมน์ (สำหรับตารางสินค้า)
+  // Helper จัดลำดับคอลัมน์
   const getProductColumns = () => {
-    if (products.length === 0) return [];
+    if (sheetData.length === 0) return [];
     
     const allKeysSet = new Set();
-    products.forEach(row => {
+    sheetData.forEach(row => {
       Object.keys(row).forEach(key => allKeysSet.add(key));
     });
     const allKeys = Array.from(allKeysSet);
@@ -209,10 +110,11 @@ export default function App() {
     const filteredKeys = allKeys.filter(key => 
       key.toLowerCase() !== 'id' && 
       key !== 'uploaded_at' && 
-      key !== 'file_url'
+      key !== 'file_url' &&
+      key !== 'username'
     );
 
-    const preferredOrder = ['username', 'ชื่อ-สกุล', 'ชื่อสกุล(ผู้รับ)', 'ความเกี่ยวข้อง', 'สถานะ', 'status'];
+    const preferredOrder = ['ชื่อ-สกุล', 'ชื่อสกุล(ผู้รับ)', 'ความเกี่ยวข้อง', 'สถานะ', 'status'];
     
     return filteredKeys.sort((a, b) => {
       const indexA = preferredOrder.indexOf(a);
@@ -224,136 +126,103 @@ export default function App() {
     });
   };
 
-  const formatDate = (isoString) => {
-    if (!isoString) return "-";
-    const date = new Date(isoString);
-    return date.toLocaleDateString('th-TH', {
-      day: '2-digit', month: 'short', year: '2-digit',
-      hour: '2-digit', minute: '2-digit'
-    });
-  };
-
-  // ✅ Helper ตัดชื่อไฟล์ให้สั้นลง (แสดงหัว...ท้าย)
-  const truncateFileName = (name, maxLength = 25) => {
-    if (!name) return "";
-    if (name.length <= maxLength) return name;
-    
-    // พยายามแยกนามสกุลไฟล์
-    const lastDotIndex = name.lastIndexOf('.');
-    if (lastDotIndex === -1) return name.substring(0, maxLength) + "..."; // ไม่มีนามสกุล
-
-    const extension = name.substring(lastDotIndex); // .pdf, .png
-    const nameWithoutExt = name.substring(0, lastDotIndex);
-    
-    const keepLength = maxLength - 3 - extension.length; // 3 คือจุด ...
-    
-    if (keepLength < 1) return name.substring(0, maxLength) + "...";
-    
-    return `${nameWithoutExt.substring(0, keepLength)}...${extension}`;
-  };
-
-  // ---------------- UI Components ----------------
-
   // ✅ รายการสถานะที่มีให้เลือกใน Dropdown
   const statusOptions = ["รอดำเนินการ", "กำลังตรวจสอบ", "สำเร็จ", "ยกเลิก"];
 
   if (view === 'login') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 flex items-center justify-center p-4 font-sans">
-        <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
-          <div className="bg-indigo-600 p-6 text-center">
-            <div className="mx-auto bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm">
-              <Database className="text-white w-8 h-8" />
+      <div className="min-h-screen bg-white flex items-center justify-center p-4 font-sans text-slate-900">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-10">
+            <div className="mx-auto bg-emerald-50 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 border border-emerald-100 shadow-sm">
+              <Database className="text-emerald-600 w-8 h-8" />
             </div>
-            <h2 className="text-2xl font-bold text-white">ระบบสมาชิก</h2>
-            <p className="text-indigo-100 text-sm mt-1">Firebase + Google Sheets</p>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-800">เข้าใช้งานระบบ</h2>
+            <p className="text-slate-400 text-sm mt-2">กรอกข้อมูลเพื่อเข้าสู่ Dashboard ของคุณ</p>
           </div>
 
-          <form onSubmit={handleLogin} className="p-8 space-y-6">
+          <form onSubmit={handleLogin} className="space-y-5">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg flex flex-col gap-1 text-sm">
-                <div className="flex items-center gap-2 font-semibold">
-                  <AlertCircle className="w-5 h-5" />
-                  เข้าสู่ระบบไม่ได้
-                </div>
-                <span className="text-xs opacity-90">{error}</span>
+              <div className="bg-red-50/50 border border-red-100 text-red-600 px-4 py-3 rounded-xl flex items-center gap-3 text-sm animate-in fade-in duration-300">
+                <AlertCircle className="w-5 h-5 shrink-0" />
+                <span>{error}</span>
               </div>
             )}
             
-            {(!firebaseConfig.apiKey || firebaseConfig.apiKey === "AIzaSy...") && (
-               <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm text-center animate-pulse">
-                 <b>Developer Alert:</b><br/>
-                 กรุณาใส่ Firebase Config ในไฟล์ App.jsx
-               </div>
-            )}
-
-            <div className="space-y-4 pt-2">
-              <div className="relative">
-                <User className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  required
-                  placeholder="Username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                />
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500 ml-1">ชื่อผู้ใช้งาน</label>
+                <div className="relative">
+                  <User className="absolute left-3.5 top-3.5 text-slate-300 w-4 h-4" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="Username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-50 focus:border-emerald-200 outline-none transition-all placeholder:text-slate-300 text-sm"
+                  />
+                </div>
               </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-                <input
-                  type="password"
-                  required
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                />
+              
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500 ml-1">รหัสผ่าน</label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3.5 text-slate-300 w-4 h-4" />
+                  <input
+                    type="password"
+                    required
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-50 focus:border-emerald-200 outline-none transition-all placeholder:text-slate-300 text-sm"
+                  />
+                </div>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={loading || !auth}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3.5 rounded-xl shadow-sm shadow-emerald-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
               {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" /> 
-                  กำลังตรวจสอบ...
-                </>
+                <Loader2 className="w-5 h-5 animate-spin" /> 
               ) : (
                 <>
-                  เข้าสู่ระบบ <ArrowRight className="w-5 h-5" />
+                  เข้าสู่ระบบ <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
+          
+          <p className="text-center text-slate-400 text-xs mt-10">
+            &copy; {new Date().getFullYear()} MySystem. All rights reserved.
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans pb-10">
-      <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-2">
-              <div className="bg-indigo-600 p-1.5 rounded-lg">
+    <div className="min-h-screen bg-white font-sans text-slate-900 pb-20">
+      <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-20 border-b border-slate-50">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="flex justify-between h-20">
+            <div className="flex items-center gap-3">
+              <div className="bg-emerald-600 p-2 rounded-xl">
                 <Database className="text-white w-5 h-5" />
               </div>
-              <span className="font-bold text-gray-800 text-lg sm:block">MySystem</span>
+              <span className="font-semibold text-slate-800 text-lg tracking-tight">MySystem</span>
             </div>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <div className="flex items-center gap-1 sm:gap-2 text-sm text-gray-600 bg-gray-100 px-2 sm:px-3 py-1.5 rounded-full border border-gray-200">
-                <UserCircle className="w-4 h-4 text-indigo-500" />
-                <span className="hidden xs:inline">ผู้ใช้: </span>
-                <b className="text-indigo-700 truncate max-w-[80px] sm:max-w-none">{user?.username}</b>
+            <div className="flex items-center gap-6">
+              <div className="hidden sm:flex items-center gap-2.5 text-sm text-slate-500 bg-emerald-50/50 px-4 py-2 rounded-full border border-emerald-100">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span className="font-medium text-emerald-800">{user?.username}</span>
               </div>
               <button
                 onClick={handleLogout}
-                className="text-gray-500 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"
+                className="text-slate-400 hover:text-rose-500 transition-colors p-2 rounded-xl hover:bg-rose-50"
                 title="ออกจากระบบ"
               >
                 <LogOut className="w-5 h-5" />
@@ -363,46 +232,45 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
+      <main className="max-w-6xl mx-auto px-6 py-12 space-y-12">
         
-        {/* === ส่วนหัวและปุ่มควบคุม === */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-500 mt-1 text-sm">
-              จัดการข้อมูลและเอกสารของคุณ
-            </p>
+        {/* === Header Section === */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="space-y-1">
+            <h1 className="text-4xl font-bold tracking-tight text-slate-900">Dashboard</h1>
+            <p className="text-slate-400 font-medium">จัดการและติดตามสถานะข้อมูลของคุณ</p>
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
             <button 
               onClick={() => fetchData(user?.username)}
               disabled={dataLoading}
-              className="flex-1 sm:flex-none text-sm text-indigo-600 hover:text-indigo-800 font-medium bg-white px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2 active:scale-95"
+              className="flex-1 md:flex-none text-sm font-semibold text-emerald-700 bg-emerald-50 px-6 py-3 rounded-xl border border-emerald-100 hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
             >
-               {dataLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-               รีเฟรช
+               {dataLoading ? <Loader2 className="w-4 h-4 animate-spin text-emerald-400" /> : <RefreshCw className="w-4 h-4" />}
+               รีเฟรชข้อมูล
             </button>
           </div>
         </div>
 
-        {/* === ตารางที่ 1: ข้อมูลสินค้า === */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Database className="w-5 h-5 text-gray-400" />
-              <h3 className="font-semibold text-gray-700">รายการข้อมูล (Data)</h3>
+        {/* === Data Table Section === */}
+        <section className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-50 rounded-lg">
+                <Database className="w-5 h-5 text-emerald-500" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800">รายการข้อมูลในระบบ</h3>
             </div>
             
-            {/* ✅ Dropdown สำหรับกรองข้อมูล (ย้ายขึ้นมาไว้ด้านบน) */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 font-medium">กรองตามสถานะ:</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">สถานะ</span>
               <select 
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all cursor-pointer shadow-sm hover:border-indigo-300"
+                className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-sm font-medium focus:ring-4 focus:ring-emerald-50/50 outline-none transition-all cursor-pointer hover:bg-slate-100"
               >
-                <option value="ทั้งหมด">ทั้งหมด</option>
+                <option value="ทั้งหมด">แสดงทั้งหมด</option>
                 {statusOptions.map(opt => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
@@ -410,41 +278,40 @@ export default function App() {
             </div>
           </div>
           
-          {dataLoading ? (
-            <div className="flex flex-col items-center justify-center h-[200px] text-gray-500">
-               <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-2" />
-               <p className="text-sm">กำลังโหลดข้อมูล...</p>
-            </div>
-          ) : filteredProducts.length > 0 ? (
-            <>
-              {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-white">
-                    <tr>
+          <div className="bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
+            {dataLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                 <Loader2 className="w-10 h-10 animate-spin text-emerald-100 mb-4" />
+                 <p className="text-sm font-medium">กำลังโหลดข้อมูล...</p>
+              </div>
+            ) : filteredProducts.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-50">
+                  <thead>
+                    <tr className="bg-slate-50/50">
                       {getProductColumns().map((header, idx) => (
-                        <th key={idx} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                        <th key={idx} className="px-8 py-5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-[0.15em]">
                           {header}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-slate-50">
                     {filteredProducts.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                      <tr key={idx} className="group hover:bg-emerald-50/10 transition-colors">
                         {getProductColumns().map((key, cellIdx) => (
-                          <td key={cellIdx} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          <td key={cellIdx} className="px-8 py-6 whitespace-nowrap text-sm text-slate-600 font-medium">
                             {key === 'สถานะ' || key === 'status' ? (
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                                row[key] === 'สำเร็จ' ? 'bg-green-100 text-green-700' :
-                                row[key] === 'กำลังตรวจสอบ' ? 'bg-blue-100 text-blue-700' :
-                                row[key] === 'ยกเลิก' ? 'bg-red-100 text-red-700' :
-                                'bg-yellow-100 text-yellow-700'
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase ${
+                                row[key] === 'สำเร็จ' ? 'bg-emerald-50 text-emerald-600' :
+                                row[key] === 'กำลังตรวจสอบ' ? 'bg-amber-50 text-amber-600' :
+                                row[key] === 'ยกเลิก' ? 'bg-rose-50 text-rose-600' :
+                                'bg-slate-100 text-slate-500'
                               }`}>
                                 {row[key] || "รอดำเนินการ"}
                               </span>
                             ) : (
-                              typeof row[key] === 'object' ? JSON.stringify(row[key]) : (row[key] || "-")
+                              row[key] || "—"
                             )}
                           </td>
                         ))}
@@ -453,175 +320,22 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
-
-              {/* Mobile Card View */}
-              <div className="md:hidden divide-y divide-gray-100">
-                {filteredProducts.map((row, idx) => (
-                  <div key={idx} className="p-5 space-y-3 bg-white active:bg-gray-50 transition-colors">
-                    {getProductColumns().map((key, cellIdx) => (
-                      <div key={cellIdx} className="flex flex-col">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{key}</span>
-                        {key === 'สถานะ' || key === 'status' ? (
-                          <div className="mt-1">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium inline-block ${
-                              row[key] === 'สำเร็จ' ? 'bg-green-100 text-green-700' :
-                              row[key] === 'กำลังตรวจสอบ' ? 'bg-blue-100 text-blue-700' :
-                              row[key] === 'ยกเลิก' ? 'bg-red-100 text-red-700' :
-                              'bg-yellow-100 text-yellow-700'
-                            }`}>
-                              {row[key] || "รอดำเนินการ"}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-800 font-medium">
-                            {typeof row[key] === 'object' ? JSON.stringify(row[key]) : (row[key] || "-")}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ))}
+            ) : (
+              <div className="py-24 text-center">
+                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Database className="w-10 h-10 text-slate-200" />
+                </div>
+                <p className="text-slate-400 font-medium text-lg">ไม่พบข้อมูลที่ค้นหา</p>
+                <button 
+                  onClick={() => setFilterStatus('ทั้งหมด')}
+                  className="mt-4 text-emerald-600 font-semibold text-sm hover:underline"
+                >
+                  ล้างตัวกรองทั้งหมด
+                </button>
               </div>
-            </>
-          ) : (
-            <div className="p-10 text-center text-gray-400 text-sm">
-              ไม่พบข้อมูลรายการที่ตรงตามเงื่อนไข
-            </div>
-          )}
-        </div>
-
-        {/* === ตารางที่ 2: เอกสารที่อัปโหลด === */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 bg-indigo-50 flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-indigo-500" />
-                <h3 className="font-semibold text-indigo-900">เอกสารที่อัปโหลด</h3>
-            </div>
-            
-            <label className={`
-                w-full xs:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-xl border shadow-sm transition-all cursor-pointer text-sm font-medium active:scale-95
-                ${uploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 
-                  (uploads.length >= 1 ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700')}
-            `}
-            onClick={(e) => {
-              if (uploads.length >= 1) {
-                e.preventDefault();
-                alert("คุณมีเอกสารแล้ว 1 ไฟล์ กรุณาลบไฟล์เดิมก่อนอัปโหลดใหม่");
-              }
-            }}
-            >
-              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
-              <span>{uploading ? 'กำลังอัป...' : (uploads.length >= 1 ? 'ครบจำนวนแล้ว' : 'อัปโหลดเอกสาร')}</span>
-              <input 
-                type="file" 
-                className="hidden" 
-                onChange={handleFileUpload} 
-                disabled={uploading || uploads.length >= 1}
-              />
-            </label>
+            )}
           </div>
-
-          {dataLoading ? (
-            <div className="flex flex-col items-center justify-center h-[150px] text-gray-500">
-               <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mb-2" />
-            </div>
-          ) : uploads.length > 0 ? (
-            <>
-              {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-white">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 w-1/2">ชื่อเอกสาร</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">วันที่อัปโหลด</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 text-right">จัดการ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {uploads.map((file, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" title={file.product}>
-                          {truncateFileName(file.product || "ไม่มีชื่อ")}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-gray-400" />
-                            {formatDate(file.uploaded_at)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right space-x-2">
-                          <a 
-                            href={file.file_url} 
-                            target="_blank" 
-                            rel="noreferrer" 
-                            className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-medium border border-indigo-200 bg-indigo-50 px-3 py-1.5 rounded-lg transition-all"
-                          >
-                            <FileText className="w-4 h-4" /> เปิดดู
-                          </a>
-                          <button 
-                            onClick={() => handleDeleteFile(file.id, file.file_url)}
-                            className="inline-flex items-center gap-1 text-red-600 hover:text-red-800 font-medium border border-red-200 bg-red-50 px-3 py-1.5 rounded-lg transition-all"
-                          >
-                            <Trash2 className="w-4 h-4" /> ลบ
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile Card View */}
-              <div className="md:hidden divide-y divide-gray-100">
-                {uploads.map((file, idx) => (
-                  <div key={idx} className="p-5 space-y-4 bg-white">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">ชื่อเอกสาร</span>
-                      <span className="text-sm font-semibold text-gray-900 break-words line-clamp-2 leading-relaxed">
-                        {file.product || "ไม่มีชื่อ"}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center justify-between items-end pt-1">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">วันที่อัปโหลด</span>
-                        <span className="text-xs text-gray-600 flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {formatDate(file.uploaded_at)}
-                        </span>
-                      </div>
-                      
-                      <div className="flex gap-2">
-                        <a 
-                          href={file.file_url} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          className="p-2.5 text-indigo-600 border border-indigo-100 bg-indigo-50 rounded-xl active:scale-90 transition-transform"
-                          title="เปิดดู"
-                        >
-                          <FileText className="w-6 h-6" />
-                        </a>
-                        <button 
-                          onClick={() => handleDeleteFile(file.id, file.file_url)}
-                          className="p-2.5 text-red-600 border border-red-100 bg-red-50 rounded-xl active:scale-90 transition-transform"
-                          title="ลบ"
-                        >
-                          <Trash2 className="w-6 h-6" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="p-10 text-center text-gray-400 text-sm">
-              <UploadCloud className="w-10 h-10 mx-auto mb-2 opacity-20" />
-              ยังไม่มีเอกสารที่อัปโหลด
-            </div>
-          )}
-        </div>
-
+        </section>
       </main>
     </div>
   );
